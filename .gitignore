@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+Documentation
+memory/
+Project_Context/
+
+# Build artifacts
+target/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Rust
+Cargo.lock
+
+# Tauri
+src-tauri/target/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp
+tmp/
+temp/
+*.tmp

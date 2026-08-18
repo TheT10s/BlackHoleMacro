@@ -1,0 +1,21 @@
+{
+  "name": "blackholemacro",
+  "version": "0.1.0",
+  "description": "Modern Windows automation and scripting engine",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@tauri-apps/cli-win32-x64-msvc": "^2.11.4",
+    "vite": "^6.4.3"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1"
+  }
+}
