@@ -67,7 +67,92 @@ pub fn get_pixel_color(x: u32, y: u32) -> Result<PixelColor, String> {
     })
 }
 
-/// Capture a region of the primary monitor and return its dimensions
+/// Template match: capture a region and compare against a reference image.
+/// Returns a score 0.0-1.0 (1.0 = perfect match) using normalized cross-correlation.
+pub fn template_match(
+    rx: u32, ry: u32, rw: u32, rh: u32,
+    template_path: &str,
+) -> Result<f64, String> {
+    let monitors = Monitor::all().map_err(|e| format!("Failed to list monitors: {}", e))?;
+    let monitor = monitors.iter()
+        .find(|m| m.is_primary().unwrap_or(false))
+        .or(monitors.first())
+        .ok_or_else(|| "No monitors found".to_string())?;
+
+    let screen_img = monitor.capture_region(rx, ry, rw, rh)
+        .map_err(|e| format!("Region capture failed: {}", e))?;
+
+    let template = image::open(template_path)
+        .map_err(|e| format!("Failed to load template '{}': {}", template_path, e))?;
+    let template = template.to_rgb8();
+
+    let sw = screen_img.width() as usize;
+    let sh = screen_img.height() as usize;
+    let tw = template.width() as usize;
+    let th = template.height() as usize;
+
+    if tw > sw || th > sh {
+        return Err(format!("Template ({}x{}) larger than region ({}x{})", tw, th, sw, sh));
+    }
+
+    // Convert to grayscale
+    let mut screen_gray = vec![0.0f64; sw * sh];
+    for y in 0..sh {
+        for x in 0..sw {
+            let p = screen_img.get_pixel(x as u32, y as u32).0;
+            screen_gray[y * sw + x] = 0.299 * p[0] as f64 + 0.587 * p[1] as f64 + 0.114 * p[2] as f64;
+        }
+    }
+
+    let mut template_gray = vec![0.0f64; tw * th];
+    for y in 0..th {
+        for x in 0..tw {
+            let p = template.get_pixel(x as u32, y as u32).0;
+            template_gray[y * tw + x] = 0.299 * p[0] as f64 + 0.587 * p[1] as f64 + 0.114 * p[2] as f64;
+        }
+    }
+
+    // Compute template mean
+    let t_mean: f64 = template_gray.iter().sum::<f64>() / (tw * th) as f64;
+
+    // Slide template over screen region
+    let mut best_score = -1.0_f64;
+    for sy in 0..=(sh - th) {
+        for sx in 0..=(sw - tw) {
+            // Compute NCC for this position
+            let mut sum_st = 0.0_f64;
+            let mut sum_ss = 0.0_f64;
+            let mut sum_tt = 0.0_f64;
+            let mut s_sum = 0.0_f64;
+
+            for ty in 0..th {
+                for tx in 0..tw {
+                    let sp = screen_gray[(sy + ty) * sw + (sx + tx)];
+                    s_sum += sp;
+                }
+            }
+            let s_mean = s_sum / (tw * th) as f64;
+
+            for ty in 0..th {
+                for tx in 0..tw {
+                    let sp = screen_gray[(sy + ty) * sw + (sx + tx)];
+                    let tp = template_gray[ty * tw + tx];
+                    let sd = sp - s_mean;
+                    let td = tp - t_mean;
+                    sum_st += sd * td;
+                    sum_ss += sd * sd;
+                    sum_tt += td * td;
+                }
+            }
+
+            let denom = (sum_ss * sum_tt).sqrt();
+            let score = if denom < 1e-10 { 0.0 } else { sum_st / denom };
+            if score > best_score { best_score = score; }
+        }
+    }
+
+    Ok(best_score)
+}
 #[tauri::command]
 pub fn capture_region(x: u32, y: u32, width: u32, height: u32) -> Result<Vec<Vec<PixelColor>>, String> {
     let monitors = Monitor::all().map_err(|e| format!("Failed to list monitors: {}", e))?;

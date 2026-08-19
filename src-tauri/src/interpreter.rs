@@ -478,8 +478,29 @@ impl Interpreter {
                 )));
                 Ok(matched)
             }
-            crate::ast::Condition::RegionMatches { .. } => {
-                self.log.push(LogEvent::Info("region match (stub)".into())); Ok(false)
+            crate::ast::Condition::RegionMatches { x, y, width, height, image_path, confidence } => {
+                let rx = self.eval_expr(x)?.to_int() as u32;
+                let ry = self.eval_expr(y)?.to_int() as u32;
+                let rw = self.eval_expr(width)?.to_int() as u32;
+                let rh = self.eval_expr(height)?.to_int() as u32;
+                let path = self.eval_expr(image_path)?.to_string_val();
+                let conf = match confidence {
+                    Some(c) => self.eval_expr(c)?.to_number(),
+                    None => 0.85,
+                };
+
+                match crate::vision_engine::template_match(rx, ry, rw, rh, &path) {
+                    Ok(score) => {
+                        let matched = score >= conf;
+                        self.log.push(LogEvent::Info(format!(
+                            "region({},{},{},{}) matches {} (score={:.3}, conf={}, {})",
+                            rx, ry, rw, rh, path, score, conf,
+                            if matched { "MATCH" } else { "no match" }
+                        )));
+                        Ok(matched)
+                    }
+                    Err(e) => Err(format!("template match failed: {}", e))
+                }
             }
             crate::ast::Condition::WaitUntil { .. } => {
                 self.log.push(LogEvent::Info("wait until (stub)".into())); Ok(false)
