@@ -1,5 +1,7 @@
 mod window_manager;
 mod input_engine;
+mod vision_engine;
+pub mod lexer;
 
 use window_manager::{WindowInfo, WindowManager};
 
@@ -46,6 +48,10 @@ pub fn run() {
             input_engine::key_hold,
             input_engine::key_release,
             input_engine::key_type_text,
+            // Vision / pixel capture
+            vision_engine::list_monitors,
+            vision_engine::get_pixel_color,
+            vision_engine::capture_region,
         ])
         .run(tauri::generate_context!())
         .expect("error while running BlackHoleMacro");

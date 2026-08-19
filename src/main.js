@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
 const resultEl = document.getElementById('test-result');
+const pixelResultEl = document.getElementById('pixel-result');
 
 function showResult(msg) {
   resultEl.textContent = msg;
@@ -46,6 +47,21 @@ window.testTypeText = async () => {
   }
 };
 
+// ─── Vision Test Functions ────────────────────────────────────────────────────
+
+window.testGetPixel = async () => {
+  const x = parseInt(document.getElementById('pixel-x').value) || 0;
+  const y = parseInt(document.getElementById('pixel-y').value) || 0;
+  try {
+    const pixel = await invoke('get_pixel_color', { x, y });
+    pixelResultEl.innerHTML =
+      '<span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:' + pixel.hex + ';vertical-align:middle;margin-right:8px;border:1px solid #555"></span>' +
+      '<strong>' + pixel.hex + '</strong> &mdash; RGB(' + pixel.r + ', ' + pixel.g + ', ' + pixel.b + ') at (' + pixel.x + ', ' + pixel.y + ')';
+  } catch (e) {
+    pixelResultEl.textContent = 'Error: ' + e;
+  }
+};
+
 // ─── Init ────────────────────────────────────────────────────────────────────
 
 async function init() {
@@ -57,12 +73,12 @@ async function init() {
     status.textContent = greeting;
 
     const windows = await invoke('list_windows');
-    windowList.innerHTML = windows.map(w =>
-      `<div class="window-item">
-        <strong>${w.title}</strong>
-        <span class="window-meta">${w.process_name} (${w.class_name})</span>
-      </div>`
-    ).join('');
+    windowList.innerHTML = windows.map(function(w) {
+      return '<div class="window-item">' +
+        '<strong>' + w.title + '</strong>' +
+        '<span class="window-meta">' + w.process_name + ' (' + w.class_name + ')</span>' +
+        '</div>';
+    }).join('');
 
   } catch (e) {
     status.textContent = 'Error: ' + e;
