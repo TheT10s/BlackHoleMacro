@@ -137,6 +137,17 @@ pub enum LogEvent {
     ScriptFinished(String, bool),
 }
 
+// ─── Color Helpers ────────────────────────────────────────────────────────────
+
+fn parse_hex_color(hex: &str) -> Result<(f64, f64, f64), String> {
+    let h = hex.trim_start_matches('#');
+    if h.len() != 6 { return Err(format!("Invalid hex color: {}", hex)); }
+    let r = u8::from_str_radix(&h[0..2], 16).map_err(|_| format!("Invalid hex: {}", hex))? as f64;
+    let g = u8::from_str_radix(&h[2..4], 16).map_err(|_| format!("Invalid hex: {}", hex))? as f64;
+    let b = u8::from_str_radix(&h[4..6], 16).map_err(|_| format!("Invalid hex: {}", hex))? as f64;
+    Ok((r, g, b))
+}
+
 // ─── Interpreter ──────────────────────────────────────────────────────────────
 
 pub struct Interpreter {
@@ -367,8 +378,13 @@ impl Interpreter {
             crate::ast::Expr::PixelColor { x, y } => {
                 let xv = self.eval_expr(x)?.to_int() as u32;
                 let yv = self.eval_expr(y)?.to_int() as u32;
-                self.log.push(LogEvent::Info(format!("pixel({}, {}) (stub)", xv, yv)));
-                Ok(Value::Color("#000000".into()))
+                match crate::vision_engine::get_pixel_color(xv, yv) {
+                    Ok(pc) => {
+                        self.log.push(LogEvent::Info(format!("pixel({}, {}) = {}", xv, yv, pc.hex)));
+                        Ok(Value::Color(pc.hex))
+                    }
+                    Err(e) => Err(format!("pixel read failed: {}", e))
+                }
             }
             crate::ast::Expr::RegionMatch { .. } => {
                 self.log.push(LogEvent::Info("region match (stub)".into()));
@@ -404,11 +420,32 @@ impl Interpreter {
         match cond {
             crate::ast::Condition::Expression(e) => { let v = self.eval_expr(e)?; Ok(v.to_bool()) }
             crate::ast::Condition::Negated(c) => { let v = self.eval_condition(c)?; Ok(!v) }
-            crate::ast::Condition::PixelMatches { x, y, color, tolerance: _ } => {
-                let xv = self.eval_expr(x)?.to_int(); let yv = self.eval_expr(y)?.to_int();
-                let cv = self.eval_expr(color)?;
-                self.log.push(LogEvent::Info(format!("pixel({}, {}) matches {} (stub)", xv, yv, cv)));
-                Ok(false)
+            crate::ast::Condition::PixelMatches { x, y, color, tolerance } => {
+                let xv = self.eval_expr(x)?.to_int() as u32;
+                let yv = self.eval_expr(y)?.to_int() as u32;
+                let pc = crate::vision_engine::get_pixel_color(xv, yv)
+                    .map_err(|e| format!("pixel read failed: {}", e))?;
+
+                let target_hex = self.eval_expr(color)?.to_string_val();
+                let (tr, tg, tb) = parse_hex_color(&target_hex)?;
+
+                let tol = match tolerance {
+                    Some(t) => self.eval_expr(t)?.to_number() as f64,
+                    None => 10.0,
+                };
+
+                let dist = ((pc.r as f64 - tr).powi(2)
+                    + (pc.g as f64 - tg).powi(2)
+                    + (pc.b as f64 - tb).powi(2))
+                    .sqrt();
+
+                let matched = dist <= tol;
+                self.log.push(LogEvent::Info(format!(
+                    "pixel({}, {}) = {} vs {} (dist={:.1}, tol={}, {})",
+                    xv, yv, pc.hex, target_hex, dist, tol,
+                    if matched { "MATCH" } else { "no match" }
+                )));
+                Ok(matched)
             }
             crate::ast::Condition::RegionMatches { .. } => {
                 self.log.push(LogEvent::Info("region match (stub)".into())); Ok(false)
@@ -553,5 +590,31 @@ on start { } }"#).unwrap();
             if let LogEvent::VariableChanged(n, v) = e { Some((n.clone(), v.clone())) } else { None }
         }).collect();
         assert!(matches!(&vars[0].1, Value::String(s) if s == "Hello World"));
+    }
+
+    #[test]
+    fn test_parse_hex_color() {
+        assert_eq!(parse_hex_color("#FF0000").unwrap(), (255.0, 0.0, 0.0));
+        assert_eq!(parse_hex_color("#00FF00").unwrap(), (0.0, 255.0, 0.0));
+        assert_eq!(parse_hex_color("#0000FF").unwrap(), (0.0, 0.0, 255.0));
+        assert_eq!(parse_hex_color("#FFFFFF").unwrap(), (255.0, 255.0, 255.0));
+        assert!(parse_hex_color("invalid").is_err());
+        assert!(parse_hex_color("#FFF").is_err());
+    }
+
+    #[test]
+    fn test_pixel_expression_reads_screen() {
+        // This test requires a display - reads pixel at (0,0) which is top-left corner
+        let log = run(r#"script "T" { version: 1 on start { var c = pixel(0, 0) } }"#).unwrap();
+        let vars: Vec<_> = log.iter().filter_map(|e| {
+            if let LogEvent::VariableChanged(n, v) = e { Some((n.clone(), v.clone())) } else { None }
+        }).collect();
+        // Should get a color value like "#RRGGBB"
+        if let Value::Color(hex) = &vars.last().unwrap().1 {
+            assert!(hex.starts_with('#'), "Expected hex color, got: {}", hex);
+            assert_eq!(hex.len(), 7, "Expected 7-char hex, got: {}", hex);
+        } else {
+            panic!("Expected Color value, got: {:?}", vars.last().unwrap().1);
+        }
     }
 }
