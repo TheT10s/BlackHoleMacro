@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "calling-rust-from-tauri-frontend": {
+      "source": "dchuk/claude-code-tauri-skills",
+      "sourceType": "github",
+      "skillPath": "tauri/tauri-calling-rust/SKILL.md",
+      "computedHash": "7a58b23132ea2047355e640bf59e90db6681431bf7c8b3387890746cb2635337"
+    },
+    "integrating-tauri-js-frontends": {
+      "source": "dchuk/claude-code-tauri-skills",
+      "sourceType": "github",
+      "skillPath": "tauri/tauri-frontend-js/SKILL.md",
+      "computedHash": "c9464094a7619579792a5194ab75363dde0db5cbaaf8897ec352940e907755de"
+    },
+    "ui-design": {
+      "source": "shajith003/awesome-claude-skills",
+      "sourceType": "github",
+      "skillPath": "ui-design/SKILL.md",
+      "computedHash": "44b4e7f6fe923ac179a556feeea1feecf10227fceca0fc890abf921895d6a665"
+    }
+  }
+}

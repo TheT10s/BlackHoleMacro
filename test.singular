@@ -1,0 +1,18 @@
+script "CLI Test" {
+    version: 1
+
+    var count = 0
+
+    function increment() {
+        count = count + 1
+    }
+hello from bhc1
+    on start {
+        key.tap("a")
+        pause 10
+        mouse.click("left")
+        call increment()
+        call increment()
+        key.type("hello from bhc")
+    }
+}

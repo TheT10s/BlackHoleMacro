@@ -3,6 +3,10 @@ name = "blackholemacro"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "bhc"
+path = "src/bin/cli.rs"
+
 [dependencies]
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
