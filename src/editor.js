@@ -23,12 +23,12 @@ export const singularityScriptLanguage = StreamLanguage.define({
     // Comments
     if (stream.match('//')) {
       stream.skipToEnd();
-      return t.comment;
+      return 'comment';
     }
 
     // Colors (#RRGGBB)
     if (stream.match(/#[0-9a-fA-F]{6}/)) {
-      return t.color;
+      return 'color';
     }
 
     // Strings
@@ -38,38 +38,38 @@ export const singularityScriptLanguage = StreamLanguage.define({
         if (ch === '\\') { stream.next(); continue; }
         if (ch === '"') break;
       }
-      return t.string;
+      return 'string';
     }
 
     // Numbers (integers and floats)
     if (stream.match(/\d+(\.\d+)?/)) {
-      return t.number;
+      return 'number';
     }
 
     // Range operator (..)
     if (stream.match('..')) {
-      return t.operator;
+      return 'operator';
     }
 
     // Action call syntax: key.tap, mouse.click, etc.
     if (stream.match(ACTION_PATTERN)) {
-      return t.function;
+      return 'function';
     }
 
     // Keywords (namespace for key/mouse, bool for true/false)
     const word = stream.match(IDENTIFIER_PATTERN);
     if (word) {
       if (SINGULARITY_KEYWORDS.includes(stream.current())) {
-        if (stream.current() === 'key' || stream.current() === 'mouse') return t.namespace;
-        if (stream.current() === 'true' || stream.current() === 'false') return t.bool;
-        return t.keyword;
+        if (stream.current() === 'key' || stream.current() === 'mouse') return 'namespace';
+        if (stream.current() === 'true' || stream.current() === 'false') return 'bool';
+        return 'keyword';
       }
-      return t.variableName;
+      return 'variableName';
     }
 
     // Operators and punctuation
     if (stream.match(/[=<>!+\-*/.,;:{}\[\]()]/)) {
-      return t.operator;
+      return 'operator';
     }
 
     // Fallback

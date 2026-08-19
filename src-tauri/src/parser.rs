@@ -132,6 +132,13 @@ impl Parser {
     fn parse_condition(&mut self) -> Result<Condition, String> {
         if self.check(&TokenKind::Not) { self.advance(); return Ok(Condition::Negated(Box::new(self.parse_condition()?))); }
         if self.check(&TokenKind::Wait) { return self.parse_wait_condition(); }
+        // Handle grouped conditions: ( condition )
+        if self.check(&TokenKind::LeftParen) {
+            self.advance();
+            let cond = self.parse_condition()?;
+            self.expect_token(&TokenKind::RightParen)?;
+            return Ok(cond);
+        }
         if let TokenKind::Identifier(ref name) = self.current().kind {
             if name == "pixel" { return self.parse_pixel_condition(); }
             if name == "region" { return self.parse_region_condition(); }
