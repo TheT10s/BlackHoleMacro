@@ -6,7 +6,7 @@ script "CLI Test" {
     function increment() {
         count = count + 1
     }
-hello from bhc1
+
     on start {
         key.tap("a")
         pause 10

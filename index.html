@@ -4,133 +4,62 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BlackHoleMacro</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #1a1a2e;
-      color: #e0e0e0;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-    #app {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      padding: 16px;
-    }
-    h1 {
-      font-size: 20px;
-      color: #7c3aed;
-      margin-bottom: 16px;
-    }
-    .status {
-      padding: 8px 12px;
-      background: #16213e;
-      border-radius: 6px;
-      font-size: 14px;
-    }
-    .status.ok { border-left: 3px solid #22c55e; }
-    #window-list {
-      margin-top: 16px;
-      max-height: 400px;
-      overflow-y: auto;
-    }
-    .window-item {
-      padding: 8px 12px;
-      background: #16213e;
-      border-radius: 4px;
-      margin-bottom: 4px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .window-meta {
-      color: #888;
-      font-size: 12px;
-    }
-    .panel {
-      margin-top: 16px;
-    }
-    .panel h2 {
-      font-size: 16px;
-      color: #a78bfa;
-      margin-bottom: 8px;
-    }
-    .test-row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 8px;
-      flex-wrap: wrap;
-    }
-    button {
-      padding: 8px 16px;
-      background: #7c3aed;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    button:hover { background: #6d28d9; }
-    button.danger { background: #dc2626; }
-    button.danger:hover { background: #b91c1c; }
-    input[type="text"] {
-      padding: 8px 12px;
-      background: #16213e;
-      border: 1px solid #334155;
-      border-radius: 4px;
-      color: #e0e0e0;
-      font-size: 13px;
-      flex: 1;
-    }
-    .test-result {
-      padding: 6px 12px;
-      background: #0f172a;
-      border-radius: 4px;
-      font-size: 12px;
-      color: #94a3b8;
-      min-height: 20px;
-      margin-top: 4px;
-    }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+ 
+  <link rel="stylesheet" href="/src/style.css">
+
 </head>
 <body>
   <div id="app">
-    <h1>BlackHoleMacro</h1>
-    <div class="status ok" id="status">Ready</div>
-
-    <!-- Input Test Panel -->
-    <div class="panel">
-      <h2>Input Engine Test</h2>
-      <div class="test-row">
-        <button onclick="testMouseMove()">Mouse Move (500,300)</button>
-        <button onclick="testMouseClick()">Mouse Click (Left)</button>
-        <button class="danger" onclick="testKeyTap()">Key Tap (A)</button>
-      </div>
-      <div class="test-row">
-        <input id="text-input" type="text" placeholder="Text to type..." value="Hello BlackHoleMacro!" />
-        <button onclick="testTypeText()">Type Text</button>
-      </div>
-      <div id="test-result" class="test-result"></div>
+    <div class="header">
+      <div class="logo"><div class="icon"></div><span>BlackHoleMacro</span></div>
+      <select class="target-select" id="target-window"><option value="">No window selected</option></select>
+      <span class="status-badge ready" id="status-badge">READY</span>
     </div>
-
-    <!-- Vision Test Panel -->
-    <div class="panel">
-      <h2>Vision Engine Test</h2>
-      <div class="test-row">
-        <input id="pixel-x" type="number" placeholder="X" value="100" style="width:80px;flex:none" />
-        <input id="pixel-y" type="number" placeholder="Y" value="100" style="width:80px;flex:none" />
-        <button onclick="testGetPixel()">Read Pixel</button>
+    <div class="editor-panel">
+      <div class="editor-toolbar">
+        <button class="btn btn-secondary btn-icon" title="Open" onclick="openFile()">📂</button>
+        <button class="btn btn-secondary btn-icon" title="Save" onclick="saveFile()">💾</button>
+        <span class="file-name" id="file-name">untitled.singular</span>
       </div>
-      <div id="pixel-result" class="test-result"></div>
+      <div class="editor-area">
+        <textarea id="editor" spellcheck="false" placeholder="Write your SingularityScript here..."></textarea>
+      </div>
     </div>
-
-    <!-- Window List -->
-    <div class="panel">
-      <h2>Windows</h2>
-      <div id="window-list"></div>
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <h3>Controls</h3>
+        <div class="controls">
+          <button class="btn btn-run" onclick="runScript()">▶ Run</button>
+          <button class="btn btn-pause" onclick="pauseScript()">⏸ Pause</button>
+          <button class="btn btn-stop" onclick="stopScript()">⏹ Stop</button>
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <h3>Pixel Picker</h3>
+        <div class="picker-row">
+          <input type="number" id="pick-x" value="0" min="0" />
+          <input type="number" id="pick-y" value="0" min="0" />
+          <button class="btn btn-secondary" onclick="pickPixel()">Pick</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+          <div class="color-swatch" id="color-swatch"></div>
+          <div><div class="color-info" id="color-hex">#000000</div><div class="color-info" id="color-rgb">rgb(0, 0, 0)</div></div>
+        </div>
+      </div>
+      <div class="sidebar-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+        <h3>Windows</h3>
+        <div class="window-list" id="window-list"></div>
+      </div>
+    </div>
+    <div class="log-panel">
+      <div class="log-header">
+        <h3>Console</h3>
+        <span class="log-count" id="log-count">0 entries</span>
+        <button class="btn btn-secondary" style="margin-left:auto;padding:3px 8px;font-size:10px;" onclick="clearLog()">Clear</button>
+      </div>
+      <div class="log-body" id="log-body"></div>
     </div>
   </div>
   <script type="module" src="/src/main.js"></script>

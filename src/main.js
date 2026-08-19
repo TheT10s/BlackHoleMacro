@@ -1,89 +1,108 @@
 import { invoke } from '@tauri-apps/api/core';
 
-const resultEl = document.getElementById('test-result');
-const pixelResultEl = document.getElementById('pixel-result');
+// --- State ---
+let logCount = 0;
+let scriptRunning = false;
 
-function showResult(msg) {
-  resultEl.textContent = msg;
+// --- Helpers ---
+function timestamp() {
+  const d = new Date();
+  return d.getHours().toString().padStart(2,'0') + ':' +
+         d.getMinutes().toString().padStart(2,'0') + ':' +
+         d.getSeconds().toString().padStart(2,'0');
 }
 
-// ─── Input Test Functions ────────────────────────────────────────────────────
+function appendLog(msg, type) {
+  const body = document.getElementById('log-body');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry ' + (type || '');
+  entry.innerHTML = '<span class="time">' + timestamp() + '</span><span class="msg"></span>';
+  entry.querySelector('.msg').textContent = msg;
+  body.appendChild(entry);
+  body.scrollTop = body.scrollHeight;
+  logCount++;
+  document.getElementById('log-count').textContent = logCount + ' entries';
+}
 
-window.testMouseMove = async () => {
-  try {
-    const res = await invoke('mouse_move', { x: 500, y: 300 });
-    showResult(res.message);
-  } catch (e) {
-    showResult('Error: ' + e);
-  }
+window.clearLog = function() {
+  document.getElementById('log-body').innerHTML = '';
+  logCount = 0;
+  document.getElementById('log-count').textContent = '0 entries';
 };
 
-window.testMouseClick = async () => {
+function setStatus(state, text) {
+  const badge = document.getElementById('status-badge');
+  badge.className = 'status-badge ' + state;
+  badge.textContent = text;
+}
+
+// --- Window List ---
+async function loadWindows() {
   try {
-    const res = await invoke('mouse_click', { button: 'Left' });
-    showResult(res.message);
+    const windows = await invoke('list_windows');
+    const list = document.getElementById('window-list');
+    const select = document.getElementById('target-window');
+    list.innerHTML = '';
+    select.innerHTML = '<option value="">No window selected</option>';
+    windows.forEach(function(w) {
+      // Sidebar list
+      const div = document.createElement('div');
+      div.className = 'window-item';
+      div.innerHTML = '<div class="title">' + w.title + '</div>' +
+                      '<div class="meta">' + w.process_name + ' (' + w.class_name + ')</div>';
+      div.onclick = function() {
+        document.querySelectorAll('.window-item').forEach(function(el) { el.classList.remove('selected'); });
+        div.classList.add('selected');
+        select.value = w.title;
+        appendLog('Target: ' + w.title, 'info');
+      };
+      list.appendChild(div);
+      // Header dropdown
+      const opt = document.createElement('option');
+      opt.value = w.title;
+      opt.textContent = w.title;
+      select.appendChild(opt);
+    });
   } catch (e) {
-    showResult('Error: ' + e);
+    appendLog('Failed to load windows: ' + e, 'error');
   }
-};
+}
 
-window.testKeyTap = async () => {
-  try {
-    const res = await invoke('key_tap', { key: 'a' });
-    showResult(res.message);
-  } catch (e) {
-    showResult('Error: ' + e);
-  }
-};
-
-window.testTypeText = async () => {
-  const text = document.getElementById('text-input').value;
-  if (!text) { showResult('Enter some text first'); return; }
-  try {
-    const res = await invoke('key_type_text', { text });
-    showResult(res.message);
-  } catch (e) {
-    showResult('Error: ' + e);
-  }
-};
-
-// ─── Vision Test Functions ────────────────────────────────────────────────────
-
-window.testGetPixel = async () => {
-  const x = parseInt(document.getElementById('pixel-x').value) || 0;
-  const y = parseInt(document.getElementById('pixel-y').value) || 0;
+// --- Pixel Picker ---
+window.pickPixel = async function() {
+  const x = parseInt(document.getElementById('pick-x').value) || 0;
+  const y = parseInt(document.getElementById('pick-y').value) || 0;
   try {
     const pixel = await invoke('get_pixel_color', { x, y });
-    pixelResultEl.innerHTML =
-      '<span style="display:inline-block;width:16px;height:16px;border-radius:3px;background:' + pixel.hex + ';vertical-align:middle;margin-right:8px;border:1px solid #555"></span>' +
-      '<strong>' + pixel.hex + '</strong> &mdash; RGB(' + pixel.r + ', ' + pixel.g + ', ' + pixel.b + ') at (' + pixel.x + ', ' + pixel.y + ')';
+    document.getElementById('color-swatch').style.background = pixel.hex;
+    document.getElementById('color-hex').textContent = pixel.hex;
+    document.getElementById('color-rgb').textContent = 'rgb(' + pixel.r + ', ' + pixel.g + ', ' + pixel.b + ')';
+    appendLog('pixel(' + x + ', ' + y + ') = ' + pixel.hex, 'match');
   } catch (e) {
-    pixelResultEl.textContent = 'Error: ' + e;
+    appendLog('Pixel pick failed: ' + e, 'error');
   }
 };
 
-// ─── Init ────────────────────────────────────────────────────────────────────
+// --- Script Run (placeholder for Task 3.3) ---
+window.runScript = function() {
+  const code = document.getElementById('editor').value;
+  if (!code.trim()) { appendLog('No script to run', 'error'); return; }
+  appendLog('Run requested (interpreter integration coming in Task 3.3)', 'info');
+  setStatus('running', 'RUNNING');
+  setTimeout(function() { setStatus('ready', 'READY'); }, 2000);
+};
 
+window.pauseScript = function() { appendLog('Pause requested', 'info'); };
+window.stopScript = function() { appendLog('Stop requested', 'info'); setStatus('ready', 'READY'); };
+
+// --- File I/O (placeholder) ---
+window.openFile = function() { appendLog('Open file (Tauri dialog coming in Task 3.2)', 'info'); };
+window.saveFile = function() { appendLog('Save file (Tauri dialog coming in Task 3.2)', 'info'); };
+
+// --- Init ---
 async function init() {
-  const status = document.getElementById('status');
-  const windowList = document.getElementById('window-list');
-
-  try {
-    const greeting = await invoke('greet', { name: 'BlackHoleMacro' });
-    status.textContent = greeting;
-
-    const windows = await invoke('list_windows');
-    windowList.innerHTML = windows.map(function(w) {
-      return '<div class="window-item">' +
-        '<strong>' + w.title + '</strong>' +
-        '<span class="window-meta">' + w.process_name + ' (' + w.class_name + ')</span>' +
-        '</div>';
-    }).join('');
-
-  } catch (e) {
-    status.textContent = 'Error: ' + e;
-    status.classList.remove('ok');
-  }
+  appendLog('BlackHoleMacro initialized', 'script');
+  await loadWindows();
 }
 
 init();
