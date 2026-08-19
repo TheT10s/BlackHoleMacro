@@ -2,6 +2,8 @@ mod window_manager;
 mod input_engine;
 mod vision_engine;
 pub mod lexer;
+pub mod ast;
+pub mod parser;
 
 use window_manager::{WindowInfo, WindowManager};
 

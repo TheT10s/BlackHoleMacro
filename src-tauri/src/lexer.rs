@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TokenKind {
     Integer(i64), Float(f64), String(String), Color(String), Identifier(String),
-    Script, Version, On, Start, Function, Call, Var,
-    If, Else, Loop, While, Break, Restart,
+    Script, Version, On, Start, Function, Call, Var, Key, Mouse,
+    If, Else, Loop, While, Break, Restart, True, False,
     Wait, Until, Return, Not, Matches, Within, Timeout, Confidence, Pause, Human,
     LeftBrace, RightBrace, LeftParen, RightParen,
     Comma, Semicolon, Colon, Dot, DotDot,
@@ -169,6 +169,8 @@ impl Lexer {
             "matches" => TokenKind::Matches, "within" => TokenKind::Within,
             "timeout" => TokenKind::Timeout, "confidence" => TokenKind::Confidence,
             "pause" => TokenKind::Pause, "human" => TokenKind::Human,
+            "key" => TokenKind::Key, "mouse" => TokenKind::Mouse,
+            "true" => TokenKind::True, "false" => TokenKind::False,
             _ => TokenKind::Identifier(word),
         };
         Token { kind, line, col }
@@ -240,7 +242,7 @@ mod tests {
         assert_eq!(tokens[3].kind, TokenKind::Integer(700));
         assert_eq!(tokens[4].kind, TokenKind::Pause);
         assert_eq!(tokens[5].kind, TokenKind::Human);
-        assert_eq!(tokens[6].kind, TokenKind::Identifier("key".to_string()));
+        assert_eq!(tokens[6].kind, TokenKind::Key);
         assert_eq!(tokens[7].kind, TokenKind::Dot);
         assert_eq!(tokens[8].kind, TokenKind::Identifier("hold".to_string()));
     }
