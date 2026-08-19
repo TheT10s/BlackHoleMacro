@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "Default capabilities for IrisMacro",
+  "description": "Default capabilities for BlackHoleMacro",
   "windows": ["main"],
   "permissions": ["core:default"]
 }
