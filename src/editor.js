@@ -53,7 +53,7 @@ export const singularityScriptLanguage = StreamLanguage.define({
 
     // Action call syntax: key.tap, mouse.click, etc.
     if (stream.match(ACTION_PATTERN)) {
-      return t.function(t.variableName);
+      return t.function;
     }
 
     // Keywords (namespace for key/mouse, bool for true/false)
@@ -146,7 +146,7 @@ const highlightStyle = syntaxHighlighting(HighlightStyle.define([
   { tag: t.string, color: '#34d399' },
   { tag: t.color, color: '#f87171', fontWeight: '600' },
   { tag: t.variableName, color: '#e2e8f0' },
-  { tag: t.function(t.variableName), color: '#a78bfa' },
+  { tag: t.function, color: '#a78bfa' },
   { tag: t.namespace, color: '#7c3aed', fontWeight: '600' },
   { tag: t.bool, color: '#fb923c', fontWeight: '600' },
   { tag: t.punctuation, color: '#64748b' },

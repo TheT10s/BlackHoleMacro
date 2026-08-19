@@ -86,7 +86,6 @@ window.pickPixel = async function() {
 };
 
 // --- Script Run ---
-let scriptRunning = false;
 
 window.runScript = async function() {
   let code;
