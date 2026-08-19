@@ -4,6 +4,7 @@ mod vision_engine;
 pub mod lexer;
 pub mod ast;
 pub mod parser;
+pub mod interpreter;
 
 use window_manager::{WindowInfo, WindowManager};
 
