@@ -1,12 +1,15 @@
 use std::fmt;
 use std::thread;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 use rand::Rng;
 use enigo::{Coordinate, Direction::{Click, Press, Release}, Keyboard, Mouse};
 
 // ─── Runtime Values ───────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Value {
     Number(f64),
     Int(i64),
@@ -125,17 +128,80 @@ pub enum Signal {
     Break,
     Restart,
     Return(Value),
+    // Internal signal for pause/stop interruption
+    Interrupted,
 }
 
 // ─── Log Events ───────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum LogEvent {
     Info(String),
     VariableChanged(String, Value),
     FunctionCalled(String),
     ScriptStarted(String),
     ScriptFinished(String, bool),
+}
+
+
+// ─── Script Controller (shared state for pause/stop) ─────────────────────────
+
+#[derive(Clone)]
+pub struct ScriptController {
+    pub stop_flag: Arc<AtomicBool>,
+    pub pause_flag: Arc<AtomicBool>,
+}
+
+impl ScriptController {
+    pub fn new() -> Self {
+        Self {
+            stop_flag: Arc::new(AtomicBool::new(false)),
+            pause_flag: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn should_stop(&self) -> bool {
+        self.stop_flag.load(Ordering::SeqCst)
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.pause_flag.load(Ordering::SeqCst)
+    }
+
+    pub fn request_stop(&self) {
+        self.stop_flag.store(true, Ordering::SeqCst);
+    }
+
+    pub fn request_pause(&self) {
+        self.pause_flag.store(true, Ordering::SeqCst);
+    }
+
+    pub fn resume(&self) {
+        self.pause_flag.store(false, Ordering::SeqCst);
+    }
+
+    pub fn sleep_with_control(&self, ms: u64) -> bool {
+        let deadline = Instant::now() + Duration::from_millis(ms);
+        loop {
+            if self.should_stop() {
+                return true;
+            }
+            if self.is_paused() {
+                thread::sleep(Duration::from_millis(10));
+                continue;
+            }
+            if Instant::now() >= deadline {
+                return false;
+            }
+            let remaining = deadline - Instant::now();
+            let sleep_for = std::cmp::min(remaining, Duration::from_millis(10));
+            thread::sleep(sleep_for);
+        }
+    }
+}
+
+impl Default for ScriptController {
+    fn default() -> Self { Self::new() }
 }
 
 // ─── Color Helpers ────────────────────────────────────────────────────────────
@@ -155,6 +221,7 @@ pub struct Interpreter {
     pub env: Environment,
     pub functions: std::collections::HashMap<String, crate::ast::FunctionDef>,
     pub log: Vec<LogEvent>,
+    pub controller: ScriptController,
 }
 
 impl Interpreter {
@@ -163,6 +230,16 @@ impl Interpreter {
             env: Environment::new(),
             functions: std::collections::HashMap::new(),
             log: Vec::new(),
+            controller: ScriptController::new(),
+        }
+    }
+
+    pub fn with_controller(controller: &ScriptController) -> Self {
+        Self {
+            env: Environment::new(),
+            functions: std::collections::HashMap::new(),
+            log: Vec::new(),
+            controller: controller.clone(),
         }
     }
 
@@ -191,11 +268,15 @@ impl Interpreter {
     }
 
     pub fn exec_block(&mut self, stmts: &[crate::ast::Stmt]) -> Result<Signal, String> {
+        if self.controller.should_stop() {
+            return Ok(Signal::Interrupted);
+        }
         self.env.push_scope();
         for stmt in stmts {
             let sig = self.exec_stmt(stmt)?;
             match &sig {
                 Signal::None => {}
+                Signal::Interrupted => { self.env.pop_scope(); return Ok(Signal::Interrupted); }
                 _ => { self.env.pop_scope(); return Ok(sig); }
             }
         }
@@ -233,18 +314,23 @@ impl Interpreter {
                         Signal::Break => break Ok(Signal::None),
                         Signal::Restart => continue,
                         Signal::Return(v) => return Ok(Signal::Return(v)),
+                        Signal::Interrupted => return Ok(Signal::Interrupted),
                         Signal::None => {}
                     }
                 }
             }
             crate::ast::Stmt::While(w) => {
                 loop {
+                    if self.controller.should_stop() {
+                        return Ok(Signal::Interrupted);
+                    }
                     let cond = self.eval_expr(&w.condition)?;
                     if !cond.to_bool() { break Ok(Signal::None); }
                     match self.exec_block(&w.body)? {
                         Signal::Break => break Ok(Signal::None),
                         Signal::Restart => continue,
                         Signal::Return(v) => return Ok(Signal::Return(v)),
+                        Signal::Interrupted => return Ok(Signal::Interrupted),
                         Signal::None => {}
                     }
                 }
@@ -261,6 +347,10 @@ impl Interpreter {
     }
 
     fn exec_action(&mut self, action: &crate::ast::ActionStmt) -> Result<Signal, String> {
+        if self.controller.should_stop() {
+            return Ok(Signal::Interrupted);
+        }
+        self.check_pause();
         match action {
             crate::ast::ActionStmt::Call { name, args } => {
                 let mut arg_vals = Vec::new();
@@ -271,33 +361,47 @@ impl Interpreter {
             crate::ast::ActionStmt::Pause(pv) => {
                 let ms = self.eval_pause_value(pv)?;
                 self.log.push(LogEvent::Info(format!("pause {}ms", ms)));
-                thread::sleep(Duration::from_millis(ms as u64));
+                let interrupted = self.controller.sleep_with_control(ms as u64);
+                if interrupted {
+                    return Ok(Signal::Interrupted);
+                }
                 Ok(Signal::None)
             }
             crate::ast::ActionStmt::KeyTap { key } => {
                 let k = self.eval_expr(key)?.to_string_val();
-                let enigo_key = crate::input_engine::parse_key(&k)?;
+                let keys = crate::input_engine::parse_combination(&k)?;
                 let mut enigo = crate::input_engine::create_enigo()?;
-                enigo.key(enigo_key, Click)
-                    .map_err(|e| format!("key.tap failed: {}", e))?;
+                for (i, enigo_key) in keys.iter().enumerate() {
+                    if i < keys.len() - 1 {
+                        enigo.key(*enigo_key, Press)
+                            .map_err(|e| format!("key.tap (hold modifier) failed: {}", e))?;
+                    } else {
+                        enigo.key(*enigo_key, Click)
+                            .map_err(|e| format!("key.tap failed: {}", e))?;
+                    }
+                }
                 self.log.push(LogEvent::Info(format!("key.tap(\"{}\")", k)));
                 Ok(Signal::None)
             }
             crate::ast::ActionStmt::KeyHold { key } => {
                 let k = self.eval_expr(key)?.to_string_val();
-                let enigo_key = crate::input_engine::parse_key(&k)?;
+                let keys = crate::input_engine::parse_combination(&k)?;
                 let mut enigo = crate::input_engine::create_enigo()?;
-                enigo.key(enigo_key, Press)
-                    .map_err(|e| format!("key.hold failed: {}", e))?;
+                for enigo_key in &keys {
+                    enigo.key(*enigo_key, Press)
+                        .map_err(|e| format!("key.hold failed: {}", e))?;
+                }
                 self.log.push(LogEvent::Info(format!("key.hold(\"{}\")", k)));
                 Ok(Signal::None)
             }
             crate::ast::ActionStmt::KeyRelease { key } => {
                 let k = self.eval_expr(key)?.to_string_val();
-                let enigo_key = crate::input_engine::parse_key(&k)?;
+                let keys = crate::input_engine::parse_combination(&k)?;
                 let mut enigo = crate::input_engine::create_enigo()?;
-                enigo.key(enigo_key, Release)
-                    .map_err(|e| format!("key.release failed: {}", e))?;
+                for enigo_key in &keys {
+                    enigo.key(*enigo_key, Release)
+                        .map_err(|e| format!("key.release failed: {}", e))?;
+                }
                 self.log.push(LogEvent::Info(format!("key.release(\"{}\")", k)));
                 Ok(Signal::None)
             }
@@ -351,6 +455,9 @@ impl Interpreter {
     fn call_function(&mut self, name: &str, args: &[Value]) -> Result<Value, String> {
         let func = self.functions.get(name).cloned()
             .ok_or_else(|| format!("Undefined function: {}", name))?;
+        if self.controller.should_stop() {
+            return Ok(Value::Void);
+        }
         self.env.push_scope();
         for (param, arg) in func.params.iter().zip(args) {
             self.env.define(param.clone(), arg.clone());
@@ -358,12 +465,29 @@ impl Interpreter {
         let sig = self.exec_block(&func.body)?;
         let result = match sig {
             Signal::Return(v) => v,
-            Signal::Break => return Err("break outside loop".into()),
-            Signal::Restart => return Err("restart outside loop".into()),
+            Signal::Break => { self.env.pop_scope(); return Err("break outside loop".into()); }
+            
+            Signal::Restart => { self.env.pop_scope(); return Err("restart outside loop".into()); }
+            
+            Signal::Interrupted => { self.env.pop_scope(); return Err("script interrupted".into()); }
             _ => Value::Void,
         };
         self.env.pop_scope();
         Ok(result)
+    }
+
+    fn check_pause(&self) {
+        if self.controller.should_stop() {
+            return;
+        }
+        if self.controller.is_paused() {
+            while self.controller.is_paused() {
+                if self.controller.should_stop() {
+                    return;
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
+        }
     }
 
     fn eval_pause_value(&mut self, pv: &crate::ast::PauseValue) -> Result<f64, String> {
@@ -417,9 +541,28 @@ impl Interpreter {
                     Err(e) => Err(format!("pixel read failed: {}", e))
                 }
             }
-            crate::ast::Expr::RegionMatch { .. } => {
-                self.log.push(LogEvent::Info("region match (stub)".into()));
-                Ok(Value::Bool(false))
+            crate::ast::Expr::RegionMatch { x, y, width, height, image_path, confidence } => {
+                let rx = self.eval_expr(x)?.to_int() as u32;
+                let ry = self.eval_expr(y)?.to_int() as u32;
+                let rw = self.eval_expr(width)?.to_int() as u32;
+                let rh = self.eval_expr(height)?.to_int() as u32;
+                let path = self.eval_expr(image_path)?.to_string_val();
+                let conf = match confidence {
+                    Some(c) => self.eval_expr(c)?.to_number(),
+                    None => 0.85,
+                };
+                match crate::vision_engine::template_match(rx, ry, rw, rh, &path) {
+                    Ok(score) => {
+                        let matched = score >= conf;
+                        self.log.push(LogEvent::Info(format!(
+                            "region({},{},{},{}) matches {} (score={:.3}, conf={}, {})",
+                            rx, ry, rw, rh, path, score, conf,
+                            if matched { "MATCH" } else { "no match" }
+                        )));
+                        Ok(Value::Bool(matched))
+                    }
+                    Err(e) => Err(format!("template match failed: {}", e))
+                }
             }
         }
     }
@@ -502,12 +645,85 @@ impl Interpreter {
                     Err(e) => Err(format!("template match failed: {}", e))
                 }
             }
-            crate::ast::Condition::WaitUntil { .. } => {
-                self.log.push(LogEvent::Info("wait until (stub)".into())); Ok(false)
+            crate::ast::Condition::WaitUntil { condition, timeout, body, else_body } => {
+                let mut deadline_ms: Option<u64> = None;
+                if let Some(t) = timeout {
+                    let tval = self.eval_expr(t)?.to_number();
+                    deadline_ms = Some(tval as u64);
+                }
+                let start = Instant::now();
+                loop {
+                    if self.controller.should_stop() {
+                        return Ok(false);
+                    }
+                    if self.controller.is_paused() {
+                        thread::sleep(Duration::from_millis(10));
+                        continue;
+                    }
+                    if self.eval_condition(condition)? {
+                        self.exec_block(body)?;
+                        return Ok(true);
+                    }
+                    if let Some(timeout_ms) = deadline_ms {
+                        if start.elapsed().as_millis() >= timeout_ms as u128 {
+                            if let Some(ref else_body) = else_body {
+                                self.exec_block(else_body)?;
+                            }
+                            return Ok(false);
+                        }
+                    }
+                    let interrupted = self.controller.sleep_with_control(50);
+                    if interrupted {
+                        return Ok(false);
+                    }
+                }
             }
         }
     }
 }
+
+// --- Global controller for run/stop/pause -------------------------------------
+
+use std::sync::OnceLock;
+
+static GLOBAL_CONTROLLER: OnceLock<ScriptController> = OnceLock::new();
+
+pub fn get_global_controller() -> ScriptController {
+    GLOBAL_CONTROLLER.get_or_init(|| ScriptController::new()).clone()
+}
+
+// --- Public run/stop/pause API for Tauri commands -----------------------------
+
+/// Run a SingularityScript string with a shared controller for pause/stop.
+pub fn run_script_with_events(
+    script_src: &str,
+    controller: ScriptController,
+) -> Result<Vec<LogEvent>, String> {
+    let script_obj = crate::parser::parse(script_src)?;
+    let mut interp = Interpreter::with_controller(&controller);
+    let result = interp.run(&script_obj);
+    let log = interp.log;
+    result.map(|_| log)
+}
+
+/// Stop the currently running script.
+pub fn stop_script() {
+    let controller = get_global_controller();
+    controller.request_stop();
+}
+
+/// Pause the currently running script.
+pub fn pause_script() {
+    let controller = get_global_controller();
+    controller.request_pause();
+}
+
+/// Resume a paused script.
+pub fn resume_script() {
+    let controller = get_global_controller();
+    controller.resume();
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -515,10 +731,9 @@ mod tests {
     use crate::parser::parse;
 
     fn run(source: &str) -> Result<Vec<LogEvent>, String> {
-        let script = parse(source)?;
-        let mut interp = Interpreter::new();
-        interp.run(&script)?;
-        Ok(interp.log)
+        let _script = parse(source)?;
+        let controller = ScriptController::new();
+        run_script_with_events(source, controller)
     }
 
     #[test]
@@ -668,5 +883,42 @@ on start { } }"#).unwrap();
         } else {
             panic!("Expected Color value, got: {:?}", vars.last().unwrap().1);
         }
+    }
+
+    #[test]
+    fn test_stop_interrupts_loop() {
+        let controller = ScriptController::new();
+        let controller_clone = controller.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            controller_clone.request_stop();
+        });
+        let src = r#"script "T" { version: 1 on start { loop { pause 50 } } }"#;
+        let result = run_script_with_events(src, controller);
+        assert!(result.is_ok());
+        let log = result.unwrap();
+        assert!(log.iter().any(|e| matches!(e, LogEvent::ScriptStarted(_))));
+    }
+
+    #[test]
+    fn test_modifier_combination_parse() {
+        let keys = crate::input_engine::parse_combination("<shift>+4").unwrap();
+        assert_eq!(keys.len(), 2, "Expected 2 keys (shift + 4)");
+    }
+
+    #[test]
+    fn test_pause_resumes() {
+        let controller = ScriptController::new();
+        let controller_clone = controller.clone();
+        let src = r#"script "T" { version: 1 on start { pause 20 } }"#;
+        let handle = std::thread::spawn(move || {
+            run_script_with_events(src, controller_clone)
+        });
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        controller.request_pause();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        controller.resume();
+        let result = handle.join().unwrap();
+        assert!(result.is_ok());
     }
 }

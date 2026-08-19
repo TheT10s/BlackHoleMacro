@@ -17,9 +17,9 @@
     .editor-toolbar{display:flex;align-items:center;padding:6px 12px;background:var(--bg-panel);border-bottom:1px solid var(--border);gap:6px}
     .editor-toolbar .file-name{flex:1;font-family:var(--mono);font-size:12px;color:var(--text-dim)}
     .editor-area{flex:1;overflow:hidden}
-    .editor-area textarea{width:100%;height:100%;background:var(--bg-deep);color:#c9d1d9;border:none;padding:16px;font-family:var(--mono);font-size:13px;line-height:1.6;resize:none;tab-size:4}
-    .editor-area textarea:focus{outline:none}
-    .editor-area textarea::placeholder{color:var(--text-muted)}
+    .editor-area #editor{width:100%;height:100%;background:var(--bg-deep);color:#c9d1d9;border:none;font-family:var(--mono);font-size:13px;line-height:1.6;tab-size:4}
+    .editor-area .cm-editor{height:100%}
+    .editor-area .cm-scroller{font-family:var(--mono)}
     .sidebar{display:flex;flex-direction:column;background:var(--bg-panel);overflow-y:auto}
     .sidebar-section{padding:12px 14px;border-bottom:1px solid var(--border)}
     .sidebar-section h3{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--text-dim);margin-bottom:10px}

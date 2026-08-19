@@ -31,6 +31,31 @@ fn get_foreground_window() -> Option<WindowInfo> {
     manager.get_foreground_window()
 }
 
+#[tauri::command]
+fn run_script(script: String) -> Result<Vec<interpreter::LogEvent>, String> {
+    let controller = interpreter::get_global_controller();
+    interpreter::run_script_with_events(&script, controller)
+}
+
+#[tauri::command]
+fn stop_script() -> Result<String, String> {
+    interpreter::stop_script();
+    Ok("Script stopped".into())
+}
+
+#[tauri::command]
+fn pause_script() -> Result<String, String> {
+    interpreter::pause_script();
+    Ok("Script paused".into())
+}
+
+#[tauri::command]
+fn resume_script() -> Result<String, String> {
+    interpreter::resume_script();
+    Ok("Script resumed".into())
+}
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -55,6 +80,11 @@ pub fn run() {
             vision_engine::list_monitors,
             vision_engine::get_pixel_color,
             vision_engine::capture_region,
+            // Script execution
+            run_script,
+            stop_script,
+            pause_script,
+            resume_script,
         ])
         .run(tauri::generate_context!())
         .expect("error while running BlackHoleMacro");

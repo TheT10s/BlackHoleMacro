@@ -88,6 +88,18 @@ pub fn parse_key(name: &str) -> Result<Key, String> {
     }
 }
 
+// Parse a key combination string like <shift>+4 into individual Key values.
+pub fn parse_combination(s: &str) -> Result<Vec<Key>, String> {
+    let mut keys = Vec::new();
+    for part in s.split('+') {
+        let part = part.trim();
+        let part = part.trim_matches(|c: char| c == '<' || c == '>');
+        let key = parse_key(part)?;
+        keys.push(key);
+    }
+    Ok(keys)
+}
+
 // ─── Mouse Commands ───────────────────────────────────────────────────────────
 
 #[tauri::command]
