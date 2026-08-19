@@ -17,20 +17,21 @@ pub struct InputResult {
     pub message: String,
 }
 
-fn create_enigo() -> Result<Enigo, String> {
+pub fn create_enigo() -> Result<Enigo, String> {
     Enigo::new(&Settings::default())
         .map_err(|e| format!("Failed to initialize input engine: {}", e))
 }
 
-fn to_button(btn: &MouseButton) -> Button {
-    match btn {
-        MouseButton::Left => Button::Left,
-        MouseButton::Right => Button::Right,
-        MouseButton::Middle => Button::Middle,
+pub fn to_button(btn: &str) -> Result<Button, String> {
+    match btn.to_lowercase().as_str() {
+        "left" => Ok(Button::Left),
+        "right" => Ok(Button::Right),
+        "middle" => Ok(Button::Middle),
+        _ => Err(format!("Unknown mouse button: '{}'", btn)),
     }
 }
 
-fn parse_key(name: &str) -> Result<Key, String> {
+pub fn parse_key(name: &str) -> Result<Key, String> {
     match name.to_lowercase().as_str() {
         "a" => Ok(Key::Unicode('a')), "b" => Ok(Key::Unicode('b')),
         "c" => Ok(Key::Unicode('c')), "d" => Ok(Key::Unicode('d')),
@@ -108,7 +109,7 @@ pub fn mouse_move_relative(dx: i32, dy: i32) -> Result<InputResult, String> {
 #[tauri::command]
 pub fn mouse_click(button: MouseButton) -> Result<InputResult, String> {
     let mut enigo = create_enigo()?;
-    let btn = to_button(&button);
+    let btn = to_button(&format!("{:?}", button).to_lowercase())?;
     enigo.button(btn, Click)
         .map_err(|e| format!("Mouse click failed: {}", e))?;
     Ok(InputResult { success: true, message: format!("Clicked {:?}", button) })
@@ -117,7 +118,7 @@ pub fn mouse_click(button: MouseButton) -> Result<InputResult, String> {
 #[tauri::command]
 pub fn mouse_press(button: MouseButton) -> Result<InputResult, String> {
     let mut enigo = create_enigo()?;
-    let btn = to_button(&button);
+    let btn = to_button(&format!("{:?}", button).to_lowercase())?;
     enigo.button(btn, Press)
         .map_err(|e| format!("Mouse press failed: {}", e))?;
     Ok(InputResult { success: true, message: format!("Pressed {:?}", button) })
@@ -126,7 +127,7 @@ pub fn mouse_press(button: MouseButton) -> Result<InputResult, String> {
 #[tauri::command]
 pub fn mouse_release(button: MouseButton) -> Result<InputResult, String> {
     let mut enigo = create_enigo()?;
-    let btn = to_button(&button);
+    let btn = to_button(&format!("{:?}", button).to_lowercase())?;
     enigo.button(btn, Release)
         .map_err(|e| format!("Mouse release failed: {}", e))?;
     Ok(InputResult { success: true, message: format!("Released {:?}", button) })

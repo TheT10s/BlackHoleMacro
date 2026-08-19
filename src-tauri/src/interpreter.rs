@@ -2,6 +2,7 @@ use std::fmt;
 use std::thread;
 use std::time::Duration;
 use rand::Rng;
+use enigo::{Coordinate, Direction::{Click, Press, Release}, Keyboard, Mouse};
 
 // ─── Runtime Values ───────────────────────────────────────────────────────────
 
@@ -274,44 +275,74 @@ impl Interpreter {
                 Ok(Signal::None)
             }
             crate::ast::ActionStmt::KeyTap { key } => {
-                let k = self.eval_expr(key)?;
-                self.log.push(LogEvent::Info(format!("key.tap(\"{}\") (stub)", k)));
+                let k = self.eval_expr(key)?.to_string_val();
+                let enigo_key = crate::input_engine::parse_key(&k)?;
+                let mut enigo = crate::input_engine::create_enigo()?;
+                enigo.key(enigo_key, Click)
+                    .map_err(|e| format!("key.tap failed: {}", e))?;
+                self.log.push(LogEvent::Info(format!("key.tap(\"{}\")", k)));
                 Ok(Signal::None)
             }
             crate::ast::ActionStmt::KeyHold { key } => {
-                let k = self.eval_expr(key)?;
-                self.log.push(LogEvent::Info(format!("key.hold(\"{}\") (stub)", k)));
+                let k = self.eval_expr(key)?.to_string_val();
+                let enigo_key = crate::input_engine::parse_key(&k)?;
+                let mut enigo = crate::input_engine::create_enigo()?;
+                enigo.key(enigo_key, Press)
+                    .map_err(|e| format!("key.hold failed: {}", e))?;
+                self.log.push(LogEvent::Info(format!("key.hold(\"{}\")", k)));
                 Ok(Signal::None)
             }
             crate::ast::ActionStmt::KeyRelease { key } => {
-                let k = self.eval_expr(key)?;
-                self.log.push(LogEvent::Info(format!("key.release(\"{}\") (stub)", k)));
+                let k = self.eval_expr(key)?.to_string_val();
+                let enigo_key = crate::input_engine::parse_key(&k)?;
+                let mut enigo = crate::input_engine::create_enigo()?;
+                enigo.key(enigo_key, Release)
+                    .map_err(|e| format!("key.release failed: {}", e))?;
+                self.log.push(LogEvent::Info(format!("key.release(\"{}\")", k)));
                 Ok(Signal::None)
             }
             crate::ast::ActionStmt::KeyTypeText { text } => {
-                let t = self.eval_expr(text)?;
-                self.log.push(LogEvent::Info(format!("key.type(\"{}\") (stub)", t)));
+                let t = self.eval_expr(text)?.to_string_val();
+                let mut enigo = crate::input_engine::create_enigo()?;
+                enigo.text(&t)
+                    .map_err(|e| format!("key.type failed: {}", e))?;
+                self.log.push(LogEvent::Info(format!("key.type(\"{}\")", t)));
                 Ok(Signal::None)
             }
             crate::ast::ActionStmt::MouseClick { button } => {
-                let b = self.eval_expr(button)?;
-                self.log.push(LogEvent::Info(format!("mouse.click(\"{}\") (stub)", b)));
+                let b = self.eval_expr(button)?.to_string_val();
+                let btn = crate::input_engine::to_button(&b)?;
+                let mut enigo = crate::input_engine::create_enigo()?;
+                enigo.button(btn, Click)
+                    .map_err(|e| format!("mouse.click failed: {}", e))?;
+                self.log.push(LogEvent::Info(format!("mouse.click(\"{}\")", b)));
                 Ok(Signal::None)
             }
             crate::ast::ActionStmt::MousePress { button } => {
-                let b = self.eval_expr(button)?;
-                self.log.push(LogEvent::Info(format!("mouse.press(\"{}\") (stub)", b)));
+                let b = self.eval_expr(button)?.to_string_val();
+                let btn = crate::input_engine::to_button(&b)?;
+                let mut enigo = crate::input_engine::create_enigo()?;
+                enigo.button(btn, Press)
+                    .map_err(|e| format!("mouse.press failed: {}", e))?;
+                self.log.push(LogEvent::Info(format!("mouse.press(\"{}\")", b)));
                 Ok(Signal::None)
             }
             crate::ast::ActionStmt::MouseRelease { button } => {
-                let b = self.eval_expr(button)?;
-                self.log.push(LogEvent::Info(format!("mouse.release(\"{}\") (stub)", b)));
+                let b = self.eval_expr(button)?.to_string_val();
+                let btn = crate::input_engine::to_button(&b)?;
+                let mut enigo = crate::input_engine::create_enigo()?;
+                enigo.button(btn, Release)
+                    .map_err(|e| format!("mouse.release failed: {}", e))?;
+                self.log.push(LogEvent::Info(format!("mouse.release(\"{}\")", b)));
                 Ok(Signal::None)
             }
             crate::ast::ActionStmt::MouseMove { x, y } => {
-                let xv = self.eval_expr(x)?;
-                let yv = self.eval_expr(y)?;
-                self.log.push(LogEvent::Info(format!("mouse.move({}, {}) (stub)", xv, yv)));
+                let xv = self.eval_expr(x)?.to_int() as i32;
+                let yv = self.eval_expr(y)?.to_int() as i32;
+                let mut enigo = crate::input_engine::create_enigo()?;
+                enigo.move_mouse(xv, yv, Coordinate::Abs)
+                    .map_err(|e| format!("mouse.move failed: {}", e))?;
+                self.log.push(LogEvent::Info(format!("mouse.move({}, {})", xv, yv)));
                 Ok(Signal::None)
             }
         }
