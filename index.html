@@ -14,7 +14,10 @@
   <div id="app">
     <div class="header">
       <div class="logo"><div class="icon"></div><span>BlackHoleMacro</span></div>
-      <select class="target-select" id="target-window"><option value="">No window selected</option></select>
+      <div class="target-row">
+        <select class="target-select" id="target-window"><option value="">No window selected</option></select>
+        <button class="btn btn-secondary btn-sm" id="refresh-windows" title="Refresh window list" onclick="refreshWindows()">?</button>
+      </div>
       <span class="status-badge ready" id="status-badge">READY</span>
     </div>
     <div class="editor-panel">

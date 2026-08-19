@@ -157,10 +157,74 @@ window.stopScript = async function() {
 window.openFile = function() { appendLog('Open file (Tauri dialog coming in Task 3.2)', 'info'); };
 window.saveFile = function() { appendLog('Save file (Tauri dialog coming in Task 3.2)', 'info'); };
 
+// --- Window List Refresh ---
+let windowRefreshInterval = null;
+
+async function refreshWindows() {
+  try {
+    const windows = await invoke('list_windows');
+    const select = document.getElementById('target-window');
+    const list = document.getElementById('window-list');
+    const currentValue = select.value;
+    
+    // Rebuild sidebar list
+    list.innerHTML = '';
+    // Rebuild dropdown
+    select.innerHTML = '<option value="">No window selected</option>';
+    
+    windows.forEach(function(w) {
+      // Sidebar list
+      const div = document.createElement('div');
+      div.className = 'window-item';
+      div.innerHTML = '<div class="title">' + w.title + '</div>' +
+                      '<div class="meta">' + w.process_name + ' (' + w.class_name + ')</div>';
+      div.onclick = function() {
+        document.querySelectorAll('.window-item').forEach(function(el) { el.classList.remove('selected'); });
+        div.classList.add('selected');
+        select.value = w.title;
+        appendLog('Target: ' + w.title, 'info');
+      };
+      list.appendChild(div);
+      // Header dropdown
+      const opt = document.createElement('option');
+      opt.value = w.title;
+      opt.textContent = w.title;
+      if (w.title === currentValue) opt.selected = true;
+      select.appendChild(opt);
+    });
+    appendLog('Window list refreshed (' + windows.length + ' windows)', 'info');
+  } catch (e) {
+    appendLog('Window refresh failed: ' + e, 'error');
+  }
+}
+
+function startWindowAutoRefresh() {
+  if (windowRefreshInterval) return;
+  windowRefreshInterval = setInterval(function() {
+    const select = document.getElementById('target-window');
+    // Only auto-refresh when dropdown is focused (user is actively looking)
+    if (select && select === document.activeElement) {
+      refreshWindows();
+    }
+  }, 2000); // 2-second throttle
+}
+
+function stopWindowAutoRefresh() {
+  if (windowRefreshInterval) {
+    clearInterval(windowRefreshInterval);
+    windowRefreshInterval = null;
+  }
+}
+
+// Expose for button click
+window.refreshWindows = refreshWindows;
+
+// --- Init ---
 // --- Init ---
 async function init() {
   appendLog('BlackHoleMacro initialized', 'script');
   await loadWindows();
+  startWindowAutoRefresh();
 
   // Initialize CodeMirror editor
   const editorElement = document.getElementById('editor');
